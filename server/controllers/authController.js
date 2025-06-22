@@ -1,5 +1,6 @@
-const User = require('../models/User.js');
-const generateToken = require('../utils/generateToken.js');
+const User = require('../models/User');
+const generateToken = require('../utils/generateToken');
+const verifyGoogleToken = require('../services/googleAuthService');
 const bcrypt = require('bcryptjs');
 
 const registerUser = async (req, res) => {
@@ -56,4 +57,42 @@ const loginUser = async (req,res) => {
     }
 };
 
-module.exports = { registerUser,loginUser };
+const googleLogin = async (req,res) => {
+    try {
+        const {token: idToken} = req.body;
+        
+        const googleData = await verifyGoogleToken(idToken);
+        if(!googleData.email_verified){
+            return res.status(403).json({
+                success: false,
+                message: "Email not verified by Google",
+            });
+        }
+        let user = await User.findOne({email: googleData.email});
+        if(!user){
+            user = await User.create({
+                name: googleData.name,
+                email: googleData.email,
+                password: 'google-oauth-no-pass',
+                isGoogleUser: true,
+            });
+        }
+
+        const token = generateToken(user._id);
+        return res.status(200).json({
+            success: true,
+            message: "Google login succesfull",
+            token,
+            user
+        });
+    } catch (error) {
+        console.error("Google Login Error: ",error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Google Login Failed",
+            error: error.message,
+        });
+    }
+};
+
+module.exports = { registerUser,loginUser,googleLogin };
